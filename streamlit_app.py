@@ -66,7 +66,7 @@ from bouquet_core import (
 # 页面与主题
 # ============================================================
 st.set_page_config(
-    page_title="花间集 · AI 花束定制",
+    page_title="信心花舍 · AI 花束定制",
     page_icon="💐",
     layout="wide",
     initial_sidebar_state="expanded",
