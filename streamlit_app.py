@@ -207,6 +207,60 @@ def now_cn() -> datetime:
     return datetime.now(CN_TZ)
 
 
+def brand_logo_data_uri() -> str:
+    """芍药品牌标识：外层 8 瓣、内层 6 瓣、中心 5 瓣 + 金色花心。"""
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="outerRose" x1="18" y1="8" x2="46" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E9BCC9"/>
+      <stop offset="1" stop-color="#A95776"/>
+    </linearGradient>
+    <linearGradient id="outerPlum" x1="18" y1="8" x2="46" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C9879E"/>
+      <stop offset="1" stop-color="#6E4B73"/>
+    </linearGradient>
+    <linearGradient id="middleRose" x1="24" y1="14" x2="40" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E8B6C4"/>
+      <stop offset="1" stop-color="#A95776"/>
+    </linearGradient>
+    <linearGradient id="innerPlum" x1="27" y1="20" x2="37" y2="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D394AA"/>
+      <stop offset="1" stop-color="#754E79"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="28" y1="8" x2="38" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E8CE98"/>
+      <stop offset="1" stop-color="#B58446"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30.5" fill="none" stroke="#B25F7C" stroke-opacity=".13" stroke-width=".6" stroke-dasharray="1.2 4.2"/>
+  <g stroke="#FFF9F5" stroke-opacity=".48" stroke-width=".48" stroke-linejoin="round">
+    <path d="M32 31C24 28 21 19 25 11C27 7 30 5 32 5C34 5 37 7 39 11C43 19 40 28 32 31Z" fill="url(#outerRose)"/>
+    <path d="M32 31C24 28 21 19 25 11C27 7 30 5 32 5C34 5 37 7 39 11C43 19 40 28 32 31Z" fill="url(#gold)" transform="rotate(45 32 32)"/>
+    <path d="M32 31C24 28 21 19 25 11C27 7 30 5 32 5C34 5 37 7 39 11C43 19 40 28 32 31Z" fill="url(#outerPlum)" transform="rotate(90 32 32)"/>
+    <path d="M32 31C24 28 21 19 25 11C27 7 30 5 32 5C34 5 37 7 39 11C43 19 40 28 32 31Z" fill="url(#outerRose)" transform="rotate(135 32 32)"/>
+    <path d="M32 31C24 28 21 19 25 11C27 7 30 5 32 5C34 5 37 7 39 11C43 19 40 28 32 31Z" fill="url(#outerPlum)" transform="rotate(180 32 32)"/>
+    <path d="M32 31C24 28 21 19 25 11C27 7 30 5 32 5C34 5 37 7 39 11C43 19 40 28 32 31Z" fill="url(#outerRose)" transform="rotate(225 32 32)"/>
+    <path d="M32 31C24 28 21 19 25 11C27 7 30 5 32 5C34 5 37 7 39 11C43 19 40 28 32 31Z" fill="url(#outerPlum)" transform="rotate(270 32 32)"/>
+    <path d="M32 31C24 28 21 19 25 11C27 7 30 5 32 5C34 5 37 7 39 11C43 19 40 28 32 31Z" fill="url(#outerRose)" transform="rotate(315 32 32)"/>
+    <path d="M32 31C27 28 25 22 27 16C29 13 31 12 32 12C33 12 35 13 37 16C39 22 37 28 32 31Z" fill="url(#middleRose)" opacity=".96" transform="rotate(30 32 32)"/>
+    <path d="M32 31C27 28 25 22 27 16C29 13 31 12 32 12C33 12 35 13 37 16C39 22 37 28 32 31Z" fill="url(#middleRose)" opacity=".96" transform="rotate(90 32 32)"/>
+    <path d="M32 31C27 28 25 22 27 16C29 13 31 12 32 12C33 12 35 13 37 16C39 22 37 28 32 31Z" fill="url(#middleRose)" opacity=".96" transform="rotate(150 32 32)"/>
+    <path d="M32 31C27 28 25 22 27 16C29 13 31 12 32 12C33 12 35 13 37 16C39 22 37 28 32 31Z" fill="url(#middleRose)" opacity=".96" transform="rotate(210 32 32)"/>
+    <path d="M32 31C27 28 25 22 27 16C29 13 31 12 32 12C33 12 35 13 37 16C39 22 37 28 32 31Z" fill="url(#middleRose)" opacity=".96" transform="rotate(270 32 32)"/>
+    <path d="M32 31C27 28 25 22 27 16C29 13 31 12 32 12C33 12 35 13 37 16C39 22 37 28 32 31Z" fill="url(#middleRose)" opacity=".96" transform="rotate(330 32 32)"/>
+    <path d="M32 31C28.5 29 27 25 28.5 21C30 18.5 31 18 32 18C33 18 34 18.5 35.5 21C37 25 35.5 29 32 31Z" fill="url(#innerPlum)" opacity=".97" transform="rotate(18 32 32)"/>
+    <path d="M32 31C28.5 29 27 25 28.5 21C30 18.5 31 18 32 18C33 18 34 18.5 35.5 21C37 25 35.5 29 32 31Z" fill="url(#innerPlum)" opacity=".97" transform="rotate(90 32 32)"/>
+    <path d="M32 31C28.5 29 27 25 28.5 21C30 18.5 31 18 32 18C33 18 34 18.5 35.5 21C37 25 35.5 29 32 31Z" fill="url(#innerPlum)" opacity=".97" transform="rotate(162 32 32)"/>
+    <path d="M32 31C28.5 29 27 25 28.5 21C30 18.5 31 18 32 18C33 18 34 18.5 35.5 21C37 25 35.5 29 32 31Z" fill="url(#innerPlum)" opacity=".97" transform="rotate(234 32 32)"/>
+    <path d="M32 31C28.5 29 27 25 28.5 21C30 18.5 31 18 32 18C33 18 34 18.5 35.5 21C37 25 35.5 29 32 31Z" fill="url(#innerPlum)" opacity=".97" transform="rotate(306 32 32)"/>
+  </g>
+  <circle cx="32" cy="32" r="4.4" fill="#FFF9F3"/>
+  <path d="M32 28.3L35.7 32L32 35.7L28.3 32Z" fill="#B98B4E"/>
+  <circle cx="32" cy="32" r="1.0" fill="#7A4D73" opacity=".78"/>
+</svg>"""
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode("ascii")
+
+
 st.markdown(
     """
 <style>
@@ -268,40 +322,41 @@ st.markdown(
     .brand-lockup::after {
         content: "";
         position: absolute;
-        left: 58px;
+        left: 64px;
         right: 2px;
         bottom: 4px;
         height: 1px;
         background: linear-gradient(90deg, rgba(199, 92, 122, 0.48), rgba(199, 92, 122, 0));
     }
-    .brand-seal {
-        width: 46px;
-        height: 46px;
-        flex: 0 0 46px;
-        border-radius: 50%;
+    .brand-logo {
+        width: 52px;
+        height: 52px;
+        flex: 0 0 52px;
+        border-radius: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-family: "STKaiti", "KaiTi", "Kaiti SC", "Songti SC", serif;
-        font-size: 1.32rem;
-        font-weight: 700;
-        color: #FFFFFF;
-        background:
-            radial-gradient(circle at 30% 22%, rgba(255,255,255,0.62), transparent 34%),
-            linear-gradient(135deg, #8E3E4C 0%, #C75C7A 55%, #8D6FA8 100%);
+        padding: 5px;
+        background: linear-gradient(145deg, #FFFDFC 0%, #F8EBEF 100%);
+        border: 1px solid rgba(199, 92, 122, 0.14);
         box-shadow:
-            0 9px 20px rgba(142, 62, 76, 0.24),
-            inset 0 0 0 1px rgba(255, 255, 255, 0.38);
+            0 8px 18px rgba(142, 62, 76, 0.10),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.72);
+    }
+    .brand-logo img {
+        width: 100%;
+        height: 100%;
+        display: block;
     }
     .brand-copy {
         min-width: 0;
     }
     .brand-cn {
-        font-family: "STKaiti", "KaiTi", "Kaiti SC", "Songti SC", "Noto Serif SC", "Source Han Serif SC", serif;
-        font-size: 2.05rem;
+        font-family: "Songti SC", "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", Georgia, serif;
+        font-size: 2.08rem;
         line-height: 1.08;
-        font-weight: 700;
-        letter-spacing: 0.10em;
+        font-weight: 600;
+        letter-spacing: 0.09em;
         white-space: nowrap;
         color: #8E3E4C;
         background: linear-gradient(118deg, #6E2F3F 0%, #B95270 52%, #7A5A8C 100%);
@@ -318,15 +373,16 @@ st.markdown(
     .brand-en {
         margin-top: 5px;
         font-family: "Helvetica Neue", "Arial", sans-serif;
-        font-size: 0.54rem;
+        font-size: 0.52rem;
+        font-weight: 300;
         line-height: 1.2;
-        letter-spacing: 0.21em;
+        letter-spacing: 0.23em;
         color: #9A8792;
         text-transform: uppercase;
         white-space: nowrap;
     }
     .brand-tagline {
-        margin: 1px 0 0 58px;
+        margin: 1px 0 0 64px;
         font-size: 0.72rem;
         line-height: 1.5;
         letter-spacing: 0.07em;
@@ -1798,9 +1854,11 @@ def render_hero() -> None:
 def render_sidebar() -> None:
     with st.sidebar:
         st.markdown(
-            """
+            f"""
             <div class="brand-lockup">
-                <div class="brand-seal">花</div>
+                <div class="brand-logo">
+                    <img src="{brand_logo_data_uri()}" alt="信心花舍几何花瓣 Logo" />
+                </div>
                 <div class="brand-copy">
                     <div class="brand-cn">信心花舍</div>
                     <div class="brand-en">XINXIN FLOWER ATELIER</div>
