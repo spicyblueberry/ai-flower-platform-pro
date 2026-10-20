@@ -1,0 +1,4 @@
+libz-dev
+zlib1g-dev
+libjpeg-dev
+libfreetype-dev
