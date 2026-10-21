@@ -592,6 +592,7 @@ def price_breakdown(
                 "name": flower.get("name", ""),
                 "english_name": flower.get("english_name", ""),
                 "category": flower.get("category", "配花"),
+                "selected_color": flower.get("selected_color", ""),
                 "quantity": quantity,
                 "unit_price": unit_price,
                 "subtotal": subtotal,
@@ -996,10 +997,11 @@ def build_image_prompt(
     palette: List[str] = []
     for flower in selected:
         quantity = max(1, qty_for(quantities, int(flower["id"])))
-        color_en = color_en_for(flower, color_preference)
+        selected_color = str(flower.get("selected_color") or color_preference)
+        color_en = color_en_for(flower, selected_color)
         english_name = str(flower.get("english_name") or flower.get("name") or "flower")
         manifest.append(f"{quantity} stems of {color_en} {english_name}")
-        for color in palette_from_color(str(flower.get("color", ""))):
+        for color in palette_from_color(selected_color or str(flower.get("color", ""))):
             if color not in palette:
                 palette.append(color)
     recipe = "; ".join(manifest)
@@ -1205,7 +1207,8 @@ def _svg_bloom(
 
 def preview_color(flower: Dict[str, Any], preferred_color: str = "任意", index: int = 0) -> str:
     palette = flower.get("palette") or palette_from_color(str(flower.get("color", "")))
-    preferred = str(preferred_color or "任意").replace("色", "")
+    selected_color = str(flower.get("selected_color") or preferred_color or "任意")
+    preferred = selected_color.replace("色", "")
     if preferred and preferred != "任意":
         for root in color_roots(str(flower.get("color", ""))):
             if preferred == root or preferred in root:
@@ -1413,7 +1416,7 @@ def build_svg_preview(
     cursor = 0
     for flower in foliage:
         quantity = max(1, qty_for(quantities, int(flower["id"])))
-        color = foliage_color(flower)
+        color = preview_color(flower, color_preference)
         for index in range(quantity):
             if cursor >= len(leaf_points):
                 break
@@ -1690,7 +1693,7 @@ def filter_flowers(
 def build_order_summary(order: Dict[str, Any]) -> str:
     items = order.get("items", [])
     item_lines = [
-        f"- {item.get('name', '')}（{item.get('category', '配花')}）× {item.get('quantity', 0)} 支：¥{item.get('subtotal', 0):.0f}"
+        f"- {item.get('name', '')}（{item.get('selected_color') or '颜色未指定'} · {item.get('category', '配花')}）× {item.get('quantity', 0)} 支：¥{item.get('subtotal', 0):.0f}"
         for item in items
     ]
     price = order.get("price", {})

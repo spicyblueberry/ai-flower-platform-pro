@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import html as html_lib
+from io import BytesIO
 import json
 import os
 import re
@@ -561,6 +562,15 @@ st.markdown(
         margin-bottom: 9px;
         box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 8px 18px rgba(96, 64, 82, 0.08);
     }
+    .flower-photo {
+        display: block;
+        width: 100%;
+        height: 190px;
+        object-fit: contain;
+        border-radius: 16px;
+        margin-bottom: 12px;
+        background: #F7EFF1;
+    }
     .fc-name {
         font-size: 1.08rem;
         font-weight: 750;
@@ -871,7 +881,9 @@ st.markdown(
 # ============================================================
 # 数据与会话状态
 # ============================================================
-DATA_PATH = os.path.join(os.path.dirname(__file__), "knowledge_base", "flower_knowledge.json")
+PROJECT_DIR = os.path.dirname(__file__)
+DATA_PATH = os.path.join(PROJECT_DIR, "assets_knowledge", "knowledge_base", "flower_knowledge.json")
+FLOWER_IMAGE_DIR = os.path.join(PROJECT_DIR, "assets_knowledge", "assets", "flowers")
 
 
 @st.cache_data(show_spinner=False, ttl=300)
@@ -957,6 +969,71 @@ if st.session_state.get("shape") not in SHAPE_OPTIONS:
 if st.session_state.get("ribbon") not in RIBBON_OPTIONS:
     st.session_state.ribbon = "champagne"
 
+COLOR_ROOT_LABELS = {
+    "红": "红色", "玫红": "玫红色", "粉": "粉色", "白": "白色",
+    "米白": "米白色", "黄": "黄色", "金": "金色", "香槟": "香槟色",
+    "紫": "紫色", "蓝": "蓝色", "灰": "灰色", "绿": "绿色",
+    "橙": "橙色", "多色": "多色", "褐": "褐色", "棕": "棕色",
+}
+IMAGE_CODE_LABELS = {
+    1: "红色", 2: "粉色", 3: "白色", 4: "黄色", 5: "香槟色",
+    6: "紫色", 7: "蓝色", 8: "绿色", 9: "橙色", 10: "多色", 11: "褐色",
+}
+IMAGE_COLOR_CODES = {
+    "红": 1, "玫红": 1, "粉": 2, "白": 3, "米白": 3, "黄": 4,
+    "金": 4, "香槟": 5, "紫": 6, "蓝": 7, "灰": 7, "绿": 8,
+    "橙": 9, "多色": 10, "褐": 11, "棕": 11,
+}
+
+
+@st.cache_data(show_spinner=False)
+def _flower_image_index(directory: str) -> Dict[int, Dict[int, str]]:
+    """Index local flower photos by flower id and filename color code."""
+    indexed: Dict[int, Dict[int, str]] = {}
+    if not os.path.isdir(directory):
+        return indexed
+    pattern = re.compile(r"^(\d+)_(\d+)(?:_\d+)?\.(?:png|jpe?g|webp)$", re.IGNORECASE)
+    for filename in sorted(os.listdir(directory)):
+        match = pattern.match(filename)
+        if not match:
+            continue
+        flower_id, color_code = int(match.group(1)), int(match.group(2))
+        indexed.setdefault(flower_id, {}).setdefault(
+            color_code, os.path.join(directory, filename)
+        )
+    return indexed
+
+
+def flower_color_options(flower: Dict[str, Any]) -> List[str]:
+    """Use available photo variants as the source of selectable colors."""
+    try:
+        flower_id = int(flower["id"])
+    except (KeyError, TypeError, ValueError):
+        return ["多色"]
+    variants = _flower_image_index(FLOWER_IMAGE_DIR).get(flower_id, {})
+    options = [
+        IMAGE_CODE_LABELS[code]
+        for code in sorted(variants)
+        if code in IMAGE_CODE_LABELS
+    ]
+    if options:
+        return list(dict.fromkeys(options))
+    return list(dict.fromkeys(
+        COLOR_ROOT_LABELS.get(root, root)
+        for root in color_roots(str(flower.get("color", "")))
+    )) or ["多色"]
+
+
+def _default_flower_color(flower: Dict[str, Any], preferred_color: str = "任意") -> str:
+    options = flower_color_options(flower)
+    preferred_roots = color_roots(preferred_color) if preferred_color not in {"", "任意"} else []
+    for root in preferred_roots:
+        label = COLOR_ROOT_LABELS.get(root, root)
+        if label in options:
+            return label
+    return options[0] if options else "多色"
+
+
 # 兼容旧版本 session_state：按 id 映射到最新花材数据，避免旧字典缺字段。
 if FLOWERS:
     _by_id = {int(flower["id"]): flower for flower in FLOWERS}
@@ -969,7 +1046,18 @@ if FLOWERS:
             continue
         if _fid in _by_id and _fid not in _seen:
             _seen.add(_fid)
-            _migrated.append(_by_id[_fid])
+            _current = dict(_by_id[_fid])
+            _old_color = str(_flower.get("selected_color", ""))
+            _allowed_colors = [
+                COLOR_ROOT_LABELS.get(root, root)
+                for root in color_roots(str(_current.get("color", "")))
+            ]
+            _current["selected_color"] = (
+                _old_color if _old_color in _allowed_colors else _default_flower_color(
+                    _current, st.session_state.color
+                )
+            )
+            _migrated.append(_current)
     st.session_state.selected_flowers = _migrated
     st.session_state.flower_quantities = {
         int(key): int(value)
@@ -1010,10 +1098,27 @@ def selected_ids() -> set:
     return {int(flower["id"]) for flower in st.session_state.selected_flowers}
 
 
-def add_flower(flower: Dict[str, Any], notify: bool = True) -> bool:
+def _set_flower_color(flower_id: int, widget_key: str) -> None:
+    color = str(st.session_state.get(widget_key, ""))
+    for item in st.session_state.selected_flowers:
+        if int(item.get("id", 0)) == int(flower_id):
+            item["selected_color"] = color
+            break
+    st.session_state.generated_image = None
+
+
+def add_flower(
+    flower: Dict[str, Any],
+    notify: bool = True,
+    preferred_color: str = "任意",
+) -> bool:
     if int(flower["id"]) in selected_ids():
         return False
-    st.session_state.selected_flowers.append(dict(flower))
+    selected_flower = dict(flower)
+    selected_flower["selected_color"] = _default_flower_color(
+        selected_flower, preferred_color
+    )
+    st.session_state.selected_flowers.append(selected_flower)
     flower_id = int(flower["id"])
     st.session_state.flower_quantities[flower_id] = default_quantity(flower, st.session_state.size)
     st.session_state.custom_roles[flower_id] = (
@@ -1031,7 +1136,7 @@ def remove_flower(flower_id: int, notify: bool = True) -> None:
     st.session_state.flower_quantities.pop(int(flower_id), None)
     st.session_state.flower_quantities.pop(str(flower_id), None)
     st.session_state.custom_roles.pop(int(flower_id), None)
-    for key in (f"qty_{flower_id}", f"role_{flower_id}"):
+    for key in (f"qty_{flower_id}", f"role_{flower_id}", f"flower_color_{flower_id}"):
         st.session_state.pop(key, None)
     if notify:
         st.toast("已从花篮移除", icon="🍃")
@@ -1072,7 +1177,14 @@ def apply_recommendation_to_basket(result: Dict[str, Any]) -> None:
         if old_id not in new_ids:
             st.session_state.pop(f"qty_{old_id}", None)
             st.session_state.pop(f"role_{old_id}", None)
-    st.session_state.selected_flowers = [dict(flower) for flower in result.get("selected", [])]
+        st.session_state.pop(f"flower_color_{old_id}", None)
+    st.session_state.selected_flowers = []
+    for flower in result.get("selected", []):
+        selected_flower = dict(flower)
+        selected_flower["selected_color"] = _default_flower_color(
+            selected_flower, st.session_state.color
+        )
+        st.session_state.selected_flowers.append(selected_flower)
     quantities: Dict[int, int] = {}
     roles: Dict[int, str] = {}
     for flower in st.session_state.selected_flowers:
@@ -1081,6 +1193,9 @@ def apply_recommendation_to_basket(result: Dict[str, Any]) -> None:
         roles[flower_id] = "主花" if flower.get("category") == "主花" else "配花"
     st.session_state.flower_quantities = quantities
     st.session_state.custom_roles = roles
+    for flower in st.session_state.selected_flowers:
+        flower_id = int(flower["id"])
+        st.session_state.pop(f"flower_color_{flower_id}", None)
     st.session_state.generated_image = None
 
 
@@ -1089,6 +1204,7 @@ def reset_basket() -> None:
         flower_id = int(flower["id"])
         st.session_state.pop(f"qty_{flower_id}", None)
         st.session_state.pop(f"role_{flower_id}", None)
+        st.session_state.pop(f"flower_color_{flower_id}", None)
     st.session_state.selected_flowers = []
     st.session_state.flower_quantities = {}
     st.session_state.custom_roles = {}
@@ -1137,17 +1253,48 @@ apply_pending_preferences()
 # 模型调用
 # ============================================================
 def _friendly_api_error(status: int, body: str = "") -> str:
+    def safe_detail(raw: str, limit: int = 320) -> str:
+        detail = raw or ""
+        try:
+            parsed = json.loads(detail)
+            error = parsed.get("error", parsed) if isinstance(parsed, dict) else {}
+            if isinstance(error, dict):
+                parts = [
+                    str(error.get("message") or "").strip(),
+                    str(error.get("code") or "").strip(),
+                ]
+                request_id = (
+                    error.get("request_id") or error.get("requestId")
+                    or parsed.get("request_id") or parsed.get("requestId")
+                )
+                if request_id:
+                    parts.append(f"Request ID: {request_id}")
+                detail = "；".join(part for part in parts if part) or detail
+        except (TypeError, ValueError):
+            pass
+        detail = re.sub(r"(?i)(Bearer\s+)[^\s,;\"']+", r"\1[已隐藏]", detail)
+        detail = re.sub(
+            r"(?i)((?:api[_-]?key|authorization)[\"']?\s*[:=]\s*[\"']?)[^\s,;\"'}]+",
+            r"\1[已隐藏]",
+            detail,
+        )
+        return re.sub(r"\s+", " ", detail).strip()[:limit]
+
     if status == 401:
         return "API 认证失败，请检查密钥是否正确。"
     if status == 403:
         return "当前账号没有该模型的调用权限。"
     if status == 404:
-        return "接口不存在，请检查 API Base URL 与模型名。"
+        detail = safe_detail(body)
+        message = "接口不存在，请检查 API Base URL 与模型名。"
+        return f"{message} 服务端返回：{detail}" if detail else message
     if status == 429:
         return "调用频率或额度已用尽，请稍后再试。"
     if status >= 500:
-        return "模型服务暂时繁忙，请稍后重试。"
-    detail = re.sub(r"\s+", " ", body or "").strip()[:160]
+        detail = safe_detail(body)
+        message = f"模型服务暂时繁忙（HTTP {status}），请稍后重试。"
+        return f"{message} 服务端返回：{detail}" if detail else message
+    detail = safe_detail(body, limit=160)
     return f"API 返回 HTTP {status}。{detail}"
 
 
@@ -1488,7 +1635,7 @@ def run_recommendation(
             web_context = ""
 
     if not FLOWERS:
-        st.error("花材知识库为空，暂时无法生成搭配。请检查 knowledge_base/flower_knowledge.json。")
+        st.error("花材知识库为空。请检查 assets_knowledge/knowledge_base/flower_knowledge.json。")
         return {
             "success": False,
             "title": "暂时无法搭配",
@@ -1706,9 +1853,54 @@ def section_header(kicker: str, title: str, subtitle: str = "") -> None:
     )
 
 
+@st.cache_data(show_spinner=False, max_entries=256)
+def _flower_thumbnail_data_uri(path: str) -> str:
+    """Resize source photos before embedding so the catalog stays lightweight."""
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(path) as source:
+            image = ImageOps.exif_transpose(source).convert("RGB")
+            resampling = getattr(Image, "Resampling", Image).LANCZOS
+            image.thumbnail((720, 720), resampling)
+            buffer = BytesIO()
+            image.save(buffer, format="JPEG", quality=78, optimize=True)
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{encoded}"
+    except Exception:
+        return ""
+
+
+def flower_image_data_uri(
+    flower: Dict[str, Any], preferred_color: str = "任意"
+) -> str:
+    """Choose a matching id/color photo, then fall back to another available variant."""
+    try:
+        flower_id = int(flower["id"])
+    except (KeyError, TypeError, ValueError):
+        return ""
+
+    variants = _flower_image_index(FLOWER_IMAGE_DIR).get(flower_id, {})
+    if not variants:
+        return ""
+
+    preferred_color = str(flower.get("selected_color") or preferred_color or "任意")
+    desired_roots = color_roots(preferred_color) if preferred_color not in {"", "任意"} else []
+    desired_codes = [IMAGE_COLOR_CODES[root] for root in desired_roots if root in IMAGE_COLOR_CODES]
+    flower_roots = color_roots(str(flower.get("color", "")))
+    flower_codes = [IMAGE_COLOR_CODES[root] for root in flower_roots if root in IMAGE_COLOR_CODES]
+
+    ordered_codes = desired_codes + flower_codes + sorted(variants)
+    for code in ordered_codes:
+        if code in variants:
+            return _flower_thumbnail_data_uri(variants[code])
+    return ""
+
+
 def flower_card_html(
     flower: Dict[str, Any],
     selected: bool = False,
+    image_uri: str = "",
 ) -> str:
     palette = flower.get("palette") or ["#F2A7BC", "#E9C7D1"]
     first = palette[0]
@@ -1720,11 +1912,14 @@ def flower_card_html(
         language = language[:24] + "…"
     season_tags = [str(value) for value in flower.get("season_tags", []) if value != "全年"]
     season_label = season_tags[0] if season_tags else "全年供应"
+    image_html = (
+        f'<img class="flower-photo" src="{image_uri}" alt="{safe(flower.get("name", "花材"))}花材照片" />'
+        if image_uri
+        else f'<div class="flower-orb" style="background: linear-gradient(135deg, {first}, {second});">{flower_emoji(flower)}</div>'
+    )
     return f"""
     <div class="flower-card {'selected' if selected else ''}">
-        <div class="flower-orb" style="background: linear-gradient(135deg, {first}, {second});">
-            {flower_emoji(flower)}
-        </div>
+        {image_html}
         <div class="fc-name">{safe(flower.get('name', ''))}</div>
         <div class="fc-lang">「{safe(language)}」</div>
         <div class="fc-meta">
@@ -1740,6 +1935,7 @@ def render_flower_grid(
     flowers: Sequence[Dict[str, Any]],
     key_prefix: str,
     columns: int = 3,
+    preferred_color: str = "任意",
 ) -> None:
     if not flowers:
         return
@@ -1751,10 +1947,12 @@ def render_flower_grid(
             flower_id = int(flower["id"])
             is_selected = flower_id in selected_ids()
             with col:
+                image_uri = flower_image_data_uri(flower, preferred_color)
                 st.markdown(
                     flower_card_html(
                         flower,
                         selected=is_selected,
+                        image_uri=image_uri,
                     ),
                     unsafe_allow_html=True,
                 )
@@ -1768,7 +1966,7 @@ def render_flower_grid(
                     if is_selected:
                         remove_flower(flower_id)
                     else:
-                        add_flower(flower)
+                        add_flower(flower, preferred_color=preferred_color)
                     st.rerun()
 
 
@@ -1996,6 +2194,7 @@ def load_order_into_workbench(order: Dict[str, Any]) -> None:
         old_id = int(old_flower["id"])
         st.session_state.pop(f"qty_{old_id}", None)
         st.session_state.pop(f"role_{old_id}", None)
+        st.session_state.pop(f"flower_color_{old_id}", None)
     selected: List[Dict[str, Any]] = []
     quantities: Dict[int, int] = {}
     roles: Dict[int, str] = {}
@@ -2004,7 +2203,13 @@ def load_order_into_workbench(order: Dict[str, Any]) -> None:
         if not flower:
             continue
         flower_id = int(flower["id"])
-        selected.append(flower)
+        selected_flower = dict(flower)
+        saved_color = str(item.get("selected_color", ""))
+        allowed_colors = flower_color_options(selected_flower)
+        selected_flower["selected_color"] = (
+            saved_color if saved_color in allowed_colors else _default_flower_color(selected_flower)
+        )
+        selected.append(selected_flower)
         quantities[flower_id] = int(item.get("quantity", 1))
         roles[flower_id] = "主花" if item.get("category") == "主花" else "配花"
     st.session_state.selected_flowers = selected
@@ -2144,7 +2349,12 @@ def render_recommendation_result(result: Dict[str, Any]) -> None:
             continue
         meta = CATEGORY_META[label]
         st.markdown(f"#### {meta['emoji']} {label}")
-        render_flower_grid(flowers, f"rec_{key}", columns)
+        render_flower_grid(
+            flowers,
+            f"rec_{key}",
+            columns,
+            preferred_color=str(result.get("prefs", {}).get("color", "任意")),
+        )
 
     st.markdown('<div class="divider-soft"></div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1.2, 1, 1])
@@ -2321,7 +2531,12 @@ def render_library_page() -> None:
                 go_to("花束工作台")
 
     if page_items:
-        render_flower_grid(page_items, "library", 3)
+        render_flower_grid(
+            page_items,
+            "library",
+            3,
+            preferred_color=str(st.session_state.library_color),
+        )
     else:
         render_empty_state("🔍", "没有找到匹配的花材", "试试放宽颜色、价格或季节条件。")
 
@@ -2412,7 +2627,11 @@ def _current_spec_signature() -> str:
             "ribbon": st.session_state.ribbon,
             "color": st.session_state.color,
             "flowers": [
-                [int(flower["id"]), qty_for(st.session_state.flower_quantities, int(flower["id"]))]
+                [
+                    int(flower["id"]),
+                    str(flower.get("selected_color", "")),
+                    qty_for(st.session_state.flower_quantities, int(flower["id"])),
+                ]
                 for flower in st.session_state.selected_flowers
             ],
         },
@@ -2507,11 +2726,39 @@ def render_workbench_page() -> None:
             col_a, col_b, col_c, col_d = st.columns([3.1, 1.7, 1.0, 0.65], gap="small")
             with col_a:
                 category = str(flower.get("category", "配花"))
+                color_options = flower_color_options(flower)
+                color_key = f"flower_color_{flower_id}"
+                stored_color = str(flower.get("selected_color", ""))
+                if stored_color not in color_options:
+                    stored_color = _default_flower_color(flower, st.session_state.color)
+                    flower["selected_color"] = stored_color
+                if st.session_state.get(color_key) not in color_options:
+                    st.session_state[color_key] = stored_color
+
+                thumbnail = flower_image_data_uri(flower)
+                if thumbnail:
+                    identity_html = (
+                        f'<img src="{thumbnail}" alt="{safe(flower.get("name", "花材"))}" '
+                        'style="width:52px;height:52px;object-fit:cover;border-radius:12px;flex:0 0 52px;" />'
+                    )
+                else:
+                    identity_html = f'<span style="font-size:1.5rem;">{flower_emoji(flower)}</span>'
                 st.markdown(
-                    f"""<div class="basket-name">{flower_emoji(flower)} {safe(flower.get('name', ''))}
+                    f"""<div style="display:flex;align-items:center;gap:12px;">
+                    {identity_html}<div><div class="basket-name">{safe(flower.get('name', ''))}
                     <span class="badge soft" style="font-size:0.6rem;">{safe(category)}</span></div>
-                    <div class="basket-sub">{safe(flower.get('english_name', ''))} · ¥{float(flower.get('unit_price', 0)):.0f}/支</div>""",
+                    <div class="basket-sub">{safe(flower.get('english_name', ''))} · ¥{float(flower.get('unit_price', 0)):.0f}/支</div></div></div>""",
                     unsafe_allow_html=True,
+                )
+                st.caption("花色")
+                st.selectbox(
+                    f"{safe(flower.get('name', '花材'))}颜色",
+                    color_options,
+                    key=color_key,
+                    label_visibility="collapsed",
+                    on_change=_set_flower_color,
+                    args=(flower_id, color_key),
+                    help="为这项花材选择颜色",
                 )
             with col_b:
                 st.caption("支数")
@@ -2625,9 +2872,16 @@ def render_workbench_page() -> None:
         for item in price["flower_detail"]:
             if item["quantity"] <= 0:
                 continue
+            item_thumbnail = flower_image_data_uri(item, st.session_state.color)
+            item_image = (
+                f'<img src="{item_thumbnail}" alt="{safe(item.get("name", "花材"))}" '
+                'style="width:28px;height:28px;object-fit:cover;border-radius:8px;vertical-align:middle;margin-right:6px;" />'
+                if item_thumbnail
+                else f"{flower_emoji(item['name'], item['category'])} "
+            )
             st.markdown(
                 f"<div style='display:flex; justify-content:space-between; gap:8px; padding:4px 0; border-bottom:1px dashed rgba(111,79,119,0.10);'>"
-                f"<span>{flower_emoji(item['name'], item['category'])} {safe(item['name'])} × {item['quantity']}</span>"
+                f"<span>{item_image}{safe(item['name'])} · {safe(item.get('selected_color', ''))} × {item['quantity']}</span>"
                 f"<b>{money(item['subtotal'])}</b></div>",
                 unsafe_allow_html=True,
             )
@@ -2664,7 +2918,7 @@ def render_workbench_page() -> None:
         st.session_state.color,
     )
     manifest_text = "；".join(
-        f"{item['quantity']} 支 {item['name']}（{item['english_name']}）"
+        f"{item['quantity']} 支 {item.get('selected_color', '')} {item['name']}（{item['english_name']}）"
         for item in price["flower_detail"]
         if item["quantity"] > 0
     )
