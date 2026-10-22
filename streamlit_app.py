@@ -201,6 +201,10 @@ VISION_BASE = (_setting("VISION_API_BASE") or LLM_BASE).rstrip("/")
 VISION_MODEL = _setting("VISION_MODEL")
 IMAGE_COOLDOWN_SECONDS = int(_setting("IMAGE_COOLDOWN_SECONDS", "20") or 20)
 DAILY_IMAGE_LIMIT = int(_setting("DAILY_IMAGE_LIMIT", "12") or 12)
+LLM_RECOMMEND_TIMEOUT = int(_setting("LLM_RECOMMEND_TIMEOUT", "120") or 120)
+LLM_RECOMMEND_MAX_TOKENS = int(_setting("LLM_RECOMMEND_MAX_TOKENS", "600") or 600)
+LLM_RECOMMEND_ATTEMPTS = int(_setting("LLM_RECOMMEND_ATTEMPTS", "1") or 1)
+LLM_SHORTLIST_PER_CATEGORY = int(_setting("LLM_SHORTLIST_PER_CATEGORY", "6") or 6)
 CN_TZ = timezone(timedelta(hours=8))
 
 
@@ -1307,6 +1311,7 @@ def call_llm(
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
     use_cache: bool = True,
+    max_attempts: int = 3,
 ) -> Tuple[Optional[str], Optional[str]]:
     """调用 OpenAI 兼容的 Chat Completions 接口。"""
     model = model or LLM_MODEL
@@ -1344,7 +1349,8 @@ def call_llm(
         "Content-Type": "application/json",
     }
     last_error = "模型调用失败。"
-    for attempt in range(3):
+    attempts = max(1, int(max_attempts))
+    for attempt in range(attempts):
         try:
             response = requests.post(
                 f"{base_url}/chat/completions",
@@ -1352,7 +1358,7 @@ def call_llm(
                 json=payload,
                 timeout=timeout,
             )
-            if response.status_code in {429, 500, 502, 503, 504} and attempt < 2:
+            if response.status_code in {429, 500, 502, 503, 504} and attempt < attempts - 1:
                 last_error = _friendly_api_error(response.status_code, response.text)
                 time.sleep(1.1 * (attempt + 1))
                 continue
@@ -1387,12 +1393,12 @@ def call_llm(
                         st.session_state.llm_cache.pop(key, None)
             return content, None
         except requests.exceptions.Timeout:
-            last_error = "模型响应超时，建议稍后重试或换一个更快的模型。"
+            last_error = f"模型响应超时（{timeout} 秒），建议稍后重试或换一个更快的模型。"
         except requests.exceptions.ConnectionError:
             last_error = "无法连接模型服务，请检查网络与 API 地址。"
         except Exception as exc:
             last_error = f"模型调用异常：{type(exc).__name__}"
-        if attempt < 2:
+        if attempt < attempts - 1:
             time.sleep(0.8 * (attempt + 1))
     return None, last_error
 
@@ -1666,7 +1672,9 @@ def run_recommendation(
 
         if LLM_KEY and FLOWERS:
             config = SIZE_CONFIG.get(size_key, SIZE_CONFIG["M"])
-            shortlist = shortlist_for_llm(FLOWERS, prefs, season, 9)
+            shortlist = shortlist_for_llm(
+                FLOWERS, prefs, season, LLM_SHORTLIST_PER_CATEGORY
+            )
             candidate_lines = []
             for flower in shortlist:
                 candidate_lines.append(
@@ -1704,7 +1712,8 @@ def run_recommendation(
 2. 主花 {config['main_types']} 种、配花 {config['filler_types']} 种、叶材 {config['foliage_types']} 种、果材 {config['fruit_types']} 种；S 码可以少一种配花。
 3. 花材颜色、花语、场合要协调；喜庆场合避开容易引起误会的白色菊类；不要所有花都同一个颜色。
 4. 花束要有主次：主花撑焦点，配花做层次，叶材收轮廓，果材点睛。
-5. rationale 必须提到你实际选中的花材名称，80–140 个中文字，语气自然，不要夸张。
+5. rationale 必须提到你实际选中的花材名称，40–70 个中文字，语气自然，不要夸张。
+6. 不要输出思考过程，只输出紧凑 JSON。
 
 只输出 JSON，不要 markdown：
 {{"title":"一句花束名","rationale":"推荐语","main_ids":[1,2],"filler_ids":[3,4],"foliage_ids":[5],"fruit_ids":[6]}}"""
@@ -1713,8 +1722,10 @@ def run_recommendation(
                     {"role": "system", "content": "你只输出合法 JSON，不添加任何解释。"},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.55,
-                max_tokens=900,
+                temperature=0.45,
+                max_tokens=LLM_RECOMMEND_MAX_TOKENS,
+                timeout=LLM_RECOMMEND_TIMEOUT,
+                max_attempts=LLM_RECOMMEND_ATTEMPTS,
             )
             parsed = parse_json_object(content)
             if parsed:
