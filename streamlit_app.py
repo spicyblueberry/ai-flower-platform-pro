@@ -30,6 +30,7 @@ from bouquet_core import (
     CATEGORY_ORDER,
     COLOR_CHOICES,
     OCCASIONS,
+    PACKAGING_COLORS,
     PACKAGING_OPTIONS,
     RIBBON_OPTIONS,
     SEASON_CHOICES,
@@ -54,6 +55,7 @@ from bouquet_core import (
     price_breakdown,
     qty_for,
     recommend_local,
+    recommend_packaging_color,
     score_flower,
     shortlist_for_llm,
     size_for_budget,
@@ -672,6 +674,37 @@ st.markdown(
         background: rgba(255,255,255,0.16);
         border: 1px solid rgba(255,255,255,0.18);
     }
+    .pack-suggestion {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 13px 16px;
+        margin: -4px 0 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(199, 92, 122, 0.16);
+        background: linear-gradient(135deg, rgba(255,255,255,0.90), rgba(250,239,243,0.86));
+    }
+    .pack-suggestion .pack-copy {
+        font-size: 0.82rem;
+        line-height: 1.55;
+        color: #6D5866;
+    }
+    .color-dot {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        flex: 0 0 14px;
+        border-radius: 50%;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.65), 0 2px 7px rgba(96,64,82,0.16);
+    }
+    .color-swatch-line {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: #7D6E7B;
+        font-size: 0.76rem;
+        margin: 2px 0 2px;
+    }
     .empty-state {
         text-align: center;
         padding: 34px 24px;
@@ -920,6 +953,7 @@ DEFAULTS: Dict[str, Any] = {
     "auto_recommend": False,
     "gallery_name": "",
     "packaging": "misty",
+    "packaging_color": "ivory",
     "shape": "round",
     "ribbon": "champagne",
     "custom_message": "",
@@ -969,6 +1003,8 @@ if st.session_state.get("season_filter") not in SEASON_CHOICES:
     st.session_state.season_filter = "当季"
 if st.session_state.get("packaging") not in PACKAGING_OPTIONS:
     st.session_state.packaging = "misty"
+if st.session_state.get("packaging_color") not in PACKAGING_COLORS:
+    st.session_state.packaging_color = "ivory"
 if st.session_state.get("shape") not in SHAPE_OPTIONS:
     st.session_state.shape = "round"
 if st.session_state.get("ribbon") not in RIBBON_OPTIONS:
@@ -1149,6 +1185,12 @@ def remove_flower(flower_id: int, notify: bool = True) -> None:
 
 def current_packaging() -> Dict[str, Any]:
     return PACKAGING_OPTIONS.get(st.session_state.packaging, PACKAGING_OPTIONS["misty"])
+
+
+def current_packaging_color() -> Dict[str, Any]:
+    return PACKAGING_COLORS.get(
+        st.session_state.packaging_color, PACKAGING_COLORS["ivory"]
+    )
 
 
 def current_shape() -> Dict[str, Any]:
@@ -1670,6 +1712,8 @@ def run_recommendation(
         )
         result = local_result
         llm_error = None
+        llm_packaging_color = ""
+        llm_packaging_reason = ""
 
         if LLM_KEY and FLOWERS:
             config = SIZE_CONFIG.get(size_key, SIZE_CONFIG["M"])
@@ -1692,6 +1736,10 @@ def run_recommendation(
                         ]
                     )
                 )
+            packaging_color_lines = [
+                f"{key}|{value['label']}|{value['note']}"
+                for key, value in PACKAGING_COLORS.items()
+            ]
             prompt = f"""你是资深花艺设计师，擅长做有审美、能落地的商业花束。
 
 用户需求：
@@ -1708,16 +1756,21 @@ def run_recommendation(
 候选花材（id|中文名|英文名|类别|颜色|花语|季节|单支价）：
 {chr(10).join(candidate_lines)}
 
+可选包材颜色（key|名称|特点）：
+{chr(10).join(packaging_color_lines)}
+
 硬性规则：
 1. 只能使用候选列表里的 id，不要编造花材。
 2. 主花 {config['main_types']} 种、配花 {config['filler_types']} 种、叶材 {config['foliage_types']} 种、果材 {config['fruit_types']} 种；S 码可以少一种配花。
 3. 花材颜色、花语、场合要协调；喜庆场合避开容易引起误会的白色菊类；不要所有花都同一个颜色。
 4. 花束要有主次：主花撑焦点，配花做层次，叶材收轮廓，果材点睛。
-5. rationale 必须提到你实际选中的花材名称，40–70 个中文字，语气自然，不要夸张。
-6. 不要输出思考过程，只输出紧凑 JSON。
+5. 根据花材颜色、风格和场合，从包材颜色候选中选一个最协调的 key；包材颜色不要压过主花。
+6. rationale 必须提到你实际选中的花材名称，40–70 个中文字，语气自然，不要夸张。
+7. packaging_reason 用 20–40 个中文字解释为什么选这个包材颜色。
+8. 不要输出思考过程，只输出紧凑 JSON。
 
 只输出 JSON，不要 markdown：
-{{"title":"一句花束名","rationale":"推荐语","main_ids":[1,2],"filler_ids":[3,4],"foliage_ids":[5],"fruit_ids":[6]}}"""
+{{"title":"一句花束名","rationale":"推荐语","main_ids":[1,2],"filler_ids":[3,4],"foliage_ids":[5],"fruit_ids":[6],"packaging_color":"ivory","packaging_reason":"包材颜色理由"}}"""
             content, llm_error = call_llm(
                 [
                     {"role": "system", "content": "你只输出合法 JSON，不添加任何解释。"},
@@ -1747,12 +1800,26 @@ def run_recommendation(
                         source="llm",
                         seed=seed,
                     )
+                    llm_packaging_color = str(parsed.get("packaging_color") or "").strip()
+                    if llm_packaging_color not in PACKAGING_COLORS:
+                        llm_packaging_color = ""
+                    llm_packaging_reason = str(parsed.get("packaging_reason") or "").strip()
                 else:
                     result = local_result
                     llm_error = "模型没有给出可用的主花组合，已回退到本地搭配。"
             elif llm_error is None:
                 llm_error = "模型返回内容无法解析，已回退到本地搭配。"
 
+        packaging_color_key, packaging_reason = recommend_packaging_color(
+            result.get("selected", []), prefs
+        )
+        if llm_packaging_color:
+            packaging_color_key = llm_packaging_color
+            packaging_reason = llm_packaging_reason or packaging_reason
+        result["packaging_color"] = packaging_color_key
+        result["packaging_reason"] = packaging_reason
+        result["packaging_color_label"] = PACKAGING_COLORS[packaging_color_key]["label"]
+        st.session_state.pending_packaging_color = packaging_color_key
         result["llm_error"] = llm_error
         result["free_text"] = free_text
         result["web_used"] = bool(web_context)
@@ -2230,6 +2297,11 @@ def load_order_into_workbench(order: Dict[str, Any]) -> None:
     order_size = order.get("size") if order.get("size") in SIZE_CONFIG else st.session_state.size
     order_shape = order.get("shape") if order.get("shape") in SHAPE_OPTIONS else "round"
     order_packaging = order.get("packaging") if order.get("packaging") in PACKAGING_OPTIONS else "misty"
+    order_packaging_color = (
+        order.get("packaging_color")
+        if order.get("packaging_color") in PACKAGING_COLORS
+        else "ivory"
+    )
     order_ribbon = order.get("ribbon") if order.get("ribbon") in RIBBON_OPTIONS else "champagne"
     st.session_state.pending_widgets = {
         "size": order_size,
@@ -2239,6 +2311,7 @@ def load_order_into_workbench(order: Dict[str, Any]) -> None:
         "custom_message": order.get("message", ""),
         "order_message": order.get("message", ""),
     }
+    st.session_state.pending_packaging_color = order_packaging_color
     st.session_state.pending_quantities = quantities
     st.session_state.generated_image = None
     st.session_state.pending_nav = "花束工作台"
@@ -2334,6 +2407,19 @@ def render_recommendation_result(result: Dict[str, Any]) -> None:
                 <span class="rec-chip">预估 {money(price['total_price'])}</span>
                 <span class="rec-chip">预算 {money(budget_value)}</span>
             </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+    pack_key = str(result.get("packaging_color") or "ivory")
+    pack_meta = PACKAGING_COLORS.get(pack_key, PACKAGING_COLORS["ivory"])
+    pack_reason = str(
+        result.get("packaging_reason")
+        or f"{pack_meta['note']}，与当前花材的颜色更协调。"
+    )
+    st.markdown(
+        f"""<div class="pack-suggestion">
+            <span class="color-dot" style="background:{pack_meta['hex']};"></span>
+            <div class="pack-copy"><b>AI 包材建议：{safe(pack_meta['label'])}</b><br>{safe(pack_reason)}</div>
         </div>""",
         unsafe_allow_html=True,
     )
@@ -2636,6 +2722,7 @@ def _current_spec_signature() -> str:
             "size": st.session_state.size,
             "shape": st.session_state.shape,
             "packaging": st.session_state.packaging,
+            "packaging_color": st.session_state.packaging_color,
             "ribbon": st.session_state.ribbon,
             "color": st.session_state.color,
             "flowers": [
@@ -2695,7 +2782,12 @@ def render_workbench_page() -> None:
     section_header("STEP 01", "花束样式", "")
     render_size_selector()
 
-    c1, c2, c3 = st.columns(3, gap="medium")
+    pending_packaging_color = st.session_state.pop("pending_packaging_color", None)
+    if pending_packaging_color in PACKAGING_COLORS:
+        st.session_state.packaging_color = pending_packaging_color
+    packaging_color_keys = list(PACKAGING_COLORS.keys())
+
+    c1, c2, c3, c4 = st.columns(4, gap="medium")
     with c1:
         st.selectbox(
             "花束形态",
@@ -2712,6 +2804,13 @@ def render_workbench_page() -> None:
         )
     with c3:
         st.selectbox(
+            "包材颜色",
+            packaging_color_keys,
+            format_func=lambda key: f"{PACKAGING_COLORS[key]['label']}",
+            key="packaging_color",
+        )
+    with c4:
+        st.selectbox(
             "丝带颜色",
             list(RIBBON_OPTIONS.keys()),
             format_func=lambda key: f"{RIBBON_OPTIONS[key]['label']}",
@@ -2719,6 +2818,15 @@ def render_workbench_page() -> None:
         )
     shape = current_shape()
     packaging = current_packaging()
+    packaging_color = current_packaging_color()
+    st.markdown(
+        f"""<div class="color-swatch-line">
+            <span class="color-dot" style="background:{packaging_color['hex']};"></span>
+            <b>{safe(packaging_color['label'])}</b> · {safe(packaging_color['note'])}
+            <span style="opacity:.65;">｜{safe(shape['note'])} · {safe(packaging['note'])}</span>
+        </div>""",
+        unsafe_allow_html=True,
+    )
     st.markdown('<div class="divider-soft"></div>', unsafe_allow_html=True)
     section_header("STEP 02", "调整花材", "")
 
@@ -2865,6 +2973,7 @@ def render_workbench_page() -> None:
         st.session_state.packaging,
         st.session_state.ribbon,
         color_preference=st.session_state.color,
+        packaging_color_key=st.session_state.packaging_color,
     )
     with preview_col:
         st.markdown(
@@ -2899,7 +3008,7 @@ def render_workbench_page() -> None:
             )
         st.markdown(
             f"<div style='margin-top:12px; line-height:1.9;'>"
-            f"<div style='display:flex; justify-content:space-between;'><span>包装材料 + 形态</span><b>{money(price['packaging_cost'])}</b></div>"
+            f"<div style='display:flex; justify-content:space-between;'><span>包装材料（{safe(packaging_color['label'])}） + 形态</span><b>{money(price['packaging_cost'])}</b></div>"
             f"<div style='display:flex; justify-content:space-between;'><span>花艺师手工费</span><b>{money(price['labor_cost'])}</b></div>"
             f"<div style='display:flex; justify-content:space-between;'><span>配送费</span><b>{'免费' if price['delivery_fee'] == 0 else money(price['delivery_fee'])}</b></div>"
             f"</div>",
@@ -2928,6 +3037,7 @@ def render_workbench_page() -> None:
         st.session_state.packaging,
         st.session_state.ribbon,
         st.session_state.color,
+        packaging_color_key=st.session_state.packaging_color,
     )
     manifest_text = "；".join(
         f"{item['quantity']} 支 {item.get('selected_color', '')} {item['name']}（{item['english_name']}）"
@@ -2992,6 +3102,7 @@ def render_workbench_page() -> None:
                             "size_label": SIZE_CONFIG[st.session_state.size]["label"],
                             "shape_label": current_shape()["label"],
                             "packaging_label": current_packaging()["label"],
+                            "packaging_color_label": current_packaging_color()["label"],
                             "ribbon_label": RIBBON_OPTIONS[st.session_state.ribbon]["label"],
                             "created_at": now_cn().strftime("%m-%d %H:%M"),
                         }
@@ -3033,7 +3144,7 @@ def render_workbench_page() -> None:
                 f"""<div class="summary-card">
                     <div class="summary-label">IMAGE SPEC</div>
                     <div style="font-size:1.05rem; font-weight:800; margin:4px 0;">{safe(generated.get('size_label', SIZE_CONFIG[st.session_state.size]['label']))}</div>
-                    <div class="small-note">{safe(generated.get('shape_label', current_shape()['label']))} · {safe(generated.get('packaging_label', current_packaging()['label']))} · {safe(generated.get('ribbon_label', RIBBON_OPTIONS[st.session_state.ribbon]['label']))}</div>
+                    <div class="small-note">{safe(generated.get('shape_label', current_shape()['label']))} · {safe(generated.get('packaging_label', current_packaging()['label']))}（{safe(generated.get('packaging_color_label', current_packaging_color()['label']))}） · {safe(generated.get('ribbon_label', RIBBON_OPTIONS[st.session_state.ribbon]['label']))}</div>
                     <div class="small-note" style="margin-top:8px;">生成于 {safe(generated.get('created_at', ''))}</div>
                     <div class="small-note" style="margin-top:8px;">花材清单：{safe(generated.get('manifest', ''))}</div>
                 </div>""",
@@ -3130,6 +3241,8 @@ def render_workbench_page() -> None:
                 "shape_label": current_shape()["label"],
                 "packaging": st.session_state.packaging,
                 "packaging_label": current_packaging()["label"],
+                "packaging_color": st.session_state.packaging_color,
+                "packaging_color_label": current_packaging_color()["label"],
                 "ribbon": st.session_state.ribbon,
                 "ribbon_label": RIBBON_OPTIONS[st.session_state.ribbon]["label"],
                 "price": price,
