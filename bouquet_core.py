@@ -188,7 +188,7 @@ PACKAGING_OPTIONS: Dict[str, Dict[str, Any]] = {
         "icon": "🎀",
         "premium": 12,
         "paper": ("#F6E6E9", "#E7D4DE"),
-        "prompt": "matte Korean misty paper in soft ivory and blush",
+        "prompt": "matte Korean misty paper",
         "note": "柔和哑光，最百搭",
     },
     "kraft": {
@@ -230,6 +230,72 @@ PACKAGING_OPTIONS: Dict[str, Dict[str, Any]] = {
         "paper": ("#F3EEE5", "#E5DCCD"),
         "prompt": "exposed natural stems tied with a simple ribbon",
         "note": "保留自然茎秆",
+    },
+}
+
+PACKAGING_COLORS: Dict[str, Dict[str, Any]] = {
+    "ivory": {
+        "label": "奶油白",
+        "hex": "#F4E9D8",
+        "paper": ("#FCF7EE", "#E8D8C4"),
+        "prompt": "warm ivory",
+        "note": "百搭，显花材干净",
+    },
+    "blush": {
+        "label": "雾粉",
+        "hex": "#F0C9D2",
+        "paper": ("#FBECEF", "#E7C6CF"),
+        "prompt": "soft blush pink",
+        "note": "适合粉色、白色花材",
+    },
+    "dusty_rose": {
+        "label": "豆沙粉",
+        "hex": "#C98D9E",
+        "paper": ("#E9C9D1", "#C98D9E"),
+        "prompt": "dusty rose",
+        "note": "温柔、复古、耐看",
+    },
+    "sage": {
+        "label": "鼠尾草绿",
+        "hex": "#B4C4AE",
+        "paper": ("#E6EDE1", "#B4C4AE"),
+        "prompt": "sage green",
+        "note": "清新自然，适合森系",
+    },
+    "mist_blue": {
+        "label": "雾霾蓝",
+        "hex": "#AFC3D2",
+        "paper": ("#E5EDF2", "#AFC3D2"),
+        "prompt": "dusty powder blue",
+        "note": "冷静、高级，平衡暖色",
+    },
+    "lilac": {
+        "label": "雾紫",
+        "hex": "#C9BBDC",
+        "paper": ("#EEE8F5", "#C9BBDC"),
+        "prompt": "soft lilac",
+        "note": "浪漫，适合紫色系",
+    },
+    "champagne": {
+        "label": "香槟金",
+        "hex": "#D8BC8A",
+        "paper": ("#F3E7D2", "#D8BC8A"),
+        "prompt": "champagne gold",
+        "note": "精致，适合送礼",
+    },
+    "wine": {
+        "label": "酒红",
+        "hex": "#8E3E4C",
+        "paper": ("#B96778", "#74323E"),
+        "prompt": "deep burgundy",
+        "note": "浓郁，适合纪念日",
+    },
+    "charcoal": {
+        "label": "炭灰",
+        "hex": "#5C5962",
+        "paper": ("#BDB8C2", "#5C5962"),
+        "prompt": "charcoal grey",
+        "note": "现代极简，突出花色",
     },
 }
 
@@ -789,6 +855,114 @@ def recommendation_reasons(
     return reasons[:2]
 
 
+def recommend_packaging_color(
+    selected: Sequence[Dict[str, Any]],
+    prefs: Dict[str, Any],
+) -> Tuple[str, str]:
+    """根据花材颜色、风格和场合给出包材颜色建议。"""
+    scores = {key: 0.15 for key in PACKAGING_COLORS}
+
+    def add(key: str, points: float) -> None:
+        if key in scores:
+            scores[key] += points
+
+    color_pref = str(prefs.get("color", "任意"))
+    preferred_roots = (
+        set(color_roots(color_pref)) if color_pref not in {"", "任意"} else set()
+    )
+    preferred_scores = {
+        "粉": {"blush": 4.0, "dusty_rose": 2.5, "ivory": 0.5},
+        "玫红": {"blush": 3.8, "dusty_rose": 2.4, "ivory": 0.5},
+        "红": {"wine": 4.0, "dusty_rose": 2.0, "ivory": 0.5},
+        "白": {"ivory": 4.0, "sage": 1.5, "mist_blue": 0.8},
+        "紫": {"lilac": 4.0, "ivory": 0.8, "dusty_rose": 0.5},
+        "蓝": {"mist_blue": 4.0, "ivory": 0.8},
+        "绿": {"sage": 4.0, "ivory": 0.8},
+        "黄": {"champagne": 4.0, "ivory": 1.2},
+        "橙": {"champagne": 4.0, "ivory": 1.2},
+        "香槟": {"champagne": 4.0, "ivory": 1.2},
+        "金": {"champagne": 4.0, "ivory": 1.2},
+    }
+    for root in preferred_roots:
+        for key, points in preferred_scores.get(root, {}).items():
+            add(key, points)
+
+    main_flowers = [
+        flower for flower in selected if flower.get("category") == "主花"
+    ] or list(selected)
+    flower_roots = set()
+    for flower in main_flowers:
+        color_text = str(flower.get("selected_color") or flower.get("color", ""))
+        flower_roots.update(color_roots(color_text))
+    flower_scores = {
+        "粉": {"blush": 1.2, "dusty_rose": 0.9, "ivory": 0.3},
+        "玫红": {"blush": 1.1, "dusty_rose": 0.8, "ivory": 0.3},
+        "红": {"wine": 1.2, "dusty_rose": 0.8, "ivory": 0.3},
+        "白": {"ivory": 1.2, "sage": 0.6, "mist_blue": 0.3},
+        "紫": {"lilac": 1.2, "ivory": 0.4},
+        "蓝": {"mist_blue": 1.2, "ivory": 0.4},
+        "绿": {"sage": 1.2, "ivory": 0.4},
+        "黄": {"champagne": 1.2, "ivory": 0.7},
+        "橙": {"champagne": 1.2, "ivory": 0.7},
+        "香槟": {"champagne": 1.2, "ivory": 0.7},
+        "金": {"champagne": 1.2, "ivory": 0.7},
+    }
+    for root in flower_roots:
+        for key, points in flower_scores.get(root, {}).items():
+            add(key, points)
+
+    # Keep a light generic preference for ivory when no strong color cue exists.
+    add("ivory", 0.15)
+
+    style = str(prefs.get("style", "任意"))
+    style_scores = {
+        "浪漫": {"blush": 1.8, "dusty_rose": 1.3, "champagne": 0.8},
+        "清新自然": {"sage": 1.8, "ivory": 1.1, "mist_blue": 0.8},
+        "简约高级": {"charcoal": 1.8, "ivory": 1.4, "champagne": 1.2},
+        "温柔治愈": {"dusty_rose": 1.6, "ivory": 1.4, "sage": 0.8},
+        "阳光活力": {"champagne": 1.5, "ivory": 1.0, "blush": 0.8},
+        "复古": {"wine": 1.7, "charcoal": 1.0, "dusty_rose": 1.0},
+        "可爱": {"blush": 1.8, "ivory": 1.2},
+        "华丽大气": {"champagne": 1.8, "wine": 1.2, "charcoal": 0.8},
+    }
+    for key, points in style_scores.get(style, {}).items():
+        add(key, points)
+
+    occasion = str(prefs.get("occasion", ""))
+    occasion_scores = {
+        "婚礼": {"ivory": 1.8, "blush": 1.0, "champagne": 1.0},
+        "生日": {"blush": 1.0, "champagne": 1.0, "ivory": 0.7},
+        "毕业": {"mist_blue": 1.4, "sage": 1.0, "ivory": 0.8},
+        "开业": {"champagne": 1.8, "wine": 1.0, "ivory": 0.7},
+        "纪念日": {"dusty_rose": 1.4, "wine": 1.2, "champagne": 0.8},
+        "表白": {"blush": 1.2, "dusty_rose": 1.1, "champagne": 0.8},
+        "情人节": {"wine": 1.0, "blush": 1.2, "dusty_rose": 1.0},
+        "探望": {"sage": 1.2, "ivory": 1.3, "mist_blue": 0.6},
+        "乔迁": {"sage": 1.4, "ivory": 1.1, "champagne": 0.8},
+        "道歉": {"mist_blue": 1.2, "ivory": 1.2},
+        "母亲节": {"dusty_rose": 1.4, "ivory": 1.1},
+        "年节": {"wine": 1.0, "champagne": 1.4, "ivory": 0.8},
+    }
+    for key, points in occasion_scores.get(occasion, {}).items():
+        add(key, points)
+
+    best_key = max(PACKAGING_COLORS, key=lambda key: (scores[key], -list(PACKAGING_COLORS).index(key)))
+    label = str(PACKAGING_COLORS[best_key]["label"])
+    target = str(prefs.get("target", "TA"))
+    reason_map = {
+        "ivory": f"奶油白最百搭，不抢主花颜色，适合{occasion or '日常'}送给{target}。",
+        "blush": f"雾粉与粉色花材更同色，适合{occasion or '温柔'}的氛围，甜而不腻。",
+        "dusty_rose": f"豆沙粉能把花与包装收在同一暖色温里，适合{style or '温柔'}风格。",
+        "sage": f"鼠尾草绿让整体更自然、有呼吸感，适合{occasion or '清新'}场景。",
+        "mist_blue": f"雾霾蓝能平衡暖色花材，给{occasion or '日常'}增加一点清爽和高级感。",
+        "lilac": f"雾紫与紫色花材同色系，适合{occasion or '浪漫'}的梦幻氛围。",
+        "champagne": f"香槟金包材更适合{occasion or '送礼'}，能把整体质感提亮。",
+        "wine": f"酒红包材和红色花材呼应，适合{occasion or '隆重'}的纪念时刻。",
+        "charcoal": f"炭灰包材更现代极简，能把视线留给主花，适合{style or '高级'}风格。",
+    }
+    return best_key, reason_map[best_key]
+
+
 def _fallback_rationale(
     main: Sequence[Dict[str, Any]],
     filler: Sequence[Dict[str, Any]],
@@ -988,10 +1162,12 @@ def build_image_prompt(
     packaging_key: str,
     ribbon_key: str,
     color_preference: str = "任意",
+    packaging_color_key: str = "ivory",
 ) -> str:
     config = SIZE_CONFIG.get(size_key, SIZE_CONFIG["M"])
     shape = SHAPE_OPTIONS.get(shape_key, SHAPE_OPTIONS["round"])
     packaging = PACKAGING_OPTIONS.get(packaging_key, PACKAGING_OPTIONS["misty"])
+    packaging_color = PACKAGING_COLORS.get(packaging_color_key, PACKAGING_COLORS["ivory"])
     ribbon = RIBBON_OPTIONS.get(ribbon_key, RIBBON_OPTIONS["champagne"])
     manifest: List[str] = []
     palette: List[str] = []
@@ -1009,7 +1185,7 @@ def build_image_prompt(
     return (
         f"Professional floral studio photograph of a {size_key}-size bouquet ({config['dims']}) "
         f"{shape['prompt']}. Exact flower recipe: {recipe}. "
-        f"Wrapping: {packaging['prompt']}; ribbon: {ribbon['prompt']}. "
+        f"Wrapping: {packaging_color['prompt']} {packaging['prompt']}; ribbon: {ribbon['prompt']}. "
         f"Overall color palette: {palette_text}. "
         "Only the listed flower varieties, colors and stem counts; no extra flower species, "
         "no substitutions, no duplicated blooms. Keep the bouquet balanced and natural, with stems visible at the handle. "
@@ -1297,10 +1473,16 @@ def _points_in_region(count: int, region: Tuple[float, float, float, float], see
     return points
 
 
-def _wrapping_svg(shape_key: str, packaging_key: str, ribbon_key: str) -> str:
+def _wrapping_svg(
+    shape_key: str,
+    packaging_key: str,
+    ribbon_key: str,
+    packaging_color_key: str = "ivory",
+) -> str:
     packaging = PACKAGING_OPTIONS.get(packaging_key, PACKAGING_OPTIONS["misty"])
+    packaging_color = PACKAGING_COLORS.get(packaging_color_key, PACKAGING_COLORS["ivory"])
     ribbon = RIBBON_OPTIONS.get(ribbon_key, RIBBON_OPTIONS["champagne"])
-    light, dark = packaging["paper"]
+    light, dark = packaging_color["paper"]
     ribbon_hex = ribbon["hex"]
     paper_gradient = (
         '<defs>'
@@ -1394,6 +1576,7 @@ def build_svg_preview(
     width: int = 460,
     height: int = 460,
     color_preference: str = "任意",
+    packaging_color_key: str = "ivory",
 ) -> str:
     region = _region_for_shape(shape_key)
     foliage = [flower for flower in selected if flower.get("category") == "叶材"]
@@ -1524,12 +1707,12 @@ def build_svg_preview(
         '<rect width="460" height="460" rx="28" fill="url(#bg)"/>'
         '<circle cx="230" cy="220" r="178" fill="url(#halo)"/>'
         '<ellipse cx="230" cy="420" rx="122" ry="12" fill="#7C5A6A" opacity="0.10"/>'
-        + _wrapping_svg(shape_key, packaging_key, ribbon_key)
+        + _wrapping_svg(shape_key, packaging_key, ribbon_key, packaging_color_key)
         + "".join(layers)
         + f'<text x="26" y="38" font-family="PingFang SC, Microsoft YaHei, sans-serif" '
         f'font-size="13" fill="#6D5866" opacity="0.85">{_nice_text(shape["label"])} · {_nice_text(config["label"])}</text>'
         f'<text x="26" y="58" font-family="PingFang SC, Microsoft YaHei, sans-serif" '
-        f'font-size="11" fill="#9A8792">{_nice_text(packaging["label"])} · 按当前支数绘制</text>'
+        f'font-size="11" fill="#9A8792">{_nice_text(packaging["label"])} · {_nice_text(PACKAGING_COLORS.get(packaging_color_key, PACKAGING_COLORS["ivory"])["label"])} · 按当前支数绘制</text>'
         f'<text x="434" y="438" text-anchor="end" font-family="PingFang SC, Microsoft YaHei, sans-serif" '
         f'font-size="10" fill="#A18F9A">结构示意 · 非 AI 生成</text>'
         "</svg>"
@@ -1702,7 +1885,8 @@ def build_order_summary(order: Dict[str, Any]) -> str:
         f"收花人：{order.get('recipient', '')}  {order.get('phone', '')}",
         f"配送：{order.get('delivery_date', '')} {order.get('delivery_slot', '')}  {order.get('address', '')}",
         f"尺寸：{order.get('size_label', '')}",
-        f"形态：{order.get('shape_label', '')} · 包装：{order.get('packaging_label', '')} · 丝带：{order.get('ribbon_label', '')}",
+        f"形态：{order.get('shape_label', '')} · 包装：{order.get('packaging_label', '')}"
+        f"（{order.get('packaging_color_label', '')}） · 丝带：{order.get('ribbon_label', '')}",
         "花材：",
         *item_lines,
         f"花材费：¥{price.get('flower_cost', 0):.0f}",
